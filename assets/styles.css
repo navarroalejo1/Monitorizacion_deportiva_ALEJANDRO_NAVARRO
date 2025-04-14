@@ -1,0 +1,19 @@
+.navbar-light .nav-link.active {
+    background-color: #28a745; /* Verde institucional */
+    color: white !important;
+    font-weight: bold;
+    box-shadow: 0px 4px 12px rgba(40, 167, 69, 0.3); /* Sombra verde */
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}
+
+.navbar-light .nav-link {
+    padding: 8px 12px;
+    border-radius: 8px;
+    color: #0d3b66;
+    transition: all 0.3s ease;
+}
+
+.navbar-light .nav-link:hover {
+    background-color: #c6f6d5; /* Verde suave al pasar el mouse */
+}

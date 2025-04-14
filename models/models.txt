@@ -1,0 +1,133 @@
+📘 Documentación técnica argumentada – Modelos de ML en Monitorización Deportiva
+⚙️ Contexto General
+El archivo df_final.csv consolidado reúne más de 31.000 registros provenientes de múltiples deportes, agrupando variables relacionadas con el bienestar, molestias, carga, competencia y resultado técnico. Esta fuente es suficiente para implementar modelos avanzados que apoyen decisiones técnicas, médicas y metodológicas dentro de un sistema de monitorización deportiva integral, alineado con la metodología CRISP-DM.
+
+📊 Modelo 1: Clustering de Perfiles de Rendimiento Técnico
+🎯 Objetivo
+Agrupar deportistas según su comportamiento competitivo y estado fisiológico, generando perfiles que guíen decisiones de entrenamiento individualizado.
+
+🧠 Justificación
+A partir de columnas como PSE, Fatiga, Sueño, Dolor y Molestia, podemos construir un perfil técnico-funcional para cada atleta. Esto permitirá diseñar estrategias adaptadas a su estado físico y emocional, promoviendo una cultura de entrenamiento inteligente y sostenible.
+
+📈 Variables disponibles
+Sueño, Fatiga, Estrés, Dolor → Indicadores de bienestar
+
+PSE, Tiempo → Indicadores de esfuerzo
+
+Modalidad, Deporte → Contexto técnico
+
+Molestia (categórica) → Necesita codificación
+
+🧪 Desarrollo técnico
+Imputación de valores nulos (media o forward-fill por deportista).
+
+Normalización (StandardScaler).
+
+Algoritmo sugerido: KMeans con validación Silhouette Score.
+
+Visualización 2D de clústeres con PCA o t-SNE.
+
+🧾 Resultados esperados
+Agrupación de los deportistas en perfiles como:
+
+A: Óptimos (alto rendimiento y baja molestia)
+
+B: Sobrecargados (alto esfuerzo, baja recuperación)
+
+C: Inestables (molestias frecuentes, dolor elevado)
+
+D: Bajo estímulo (baja carga y poca competencia)
+
+💡 Aplicación
+Personalización del entrenamiento.
+
+Alertas para revisar planificación.
+
+Seguimiento longitudinal de atletas por perfil.
+
+🔄 Modelo 2: Carga Semanal Recomendada
+🎯 Objetivo
+Estimar la carga semanal ideal para cada atleta en función de sus síntomas físicos y emocionales recientes, para prevenir sobrecargas.
+
+🧠 Justificación
+Variables como Sueño, Dolor, Estrés, Molestia, junto al cumplimiento (Tipo_enc) y la carga histórica (PSE, Tiempo), permiten modelar matemáticamente la carga ideal para maximizar rendimiento y prevenir lesiones.
+
+📈 Variables disponibles
+PSE, Tiempo → Producto da unidades de carga.
+
+Sueño, Dolor, Estrés, Fatiga, Molestia
+
+Tipo_enc puede indicar cumplimiento real.
+
+Requiere agregar columna Semana para agrupar por periodo.
+
+🧪 Desarrollo técnico
+Crear variable Carga = PSE × Tiempo
+
+Calcular Carga_4s = promedio móvil de 4 semanas anteriores
+
+Algoritmos: LinearRegression, Lasso, XGBoostRegressor
+
+Validación: TimeSeriesSplit
+
+🧾 Resultados esperados
+Predicción de carga óptima en unidades para cada semana.
+
+Comparación con carga real permite evaluar riesgos.
+
+💡 Aplicación
+Planeación semanal informada.
+
+Visualizaciones por semana y deportista.
+
+Proyecciones para control de cargas acumuladas.
+
+⚠️ Modelo 3: Predicción del Riesgo de Lesión
+🎯 Objetivo
+Clasificar automáticamente el riesgo de lesión (bajo, moderado, alto) a partir de variables de carga y estado físico, generando alertas preventivas.
+
+🧠 Justificación
+El riesgo de lesión se incrementa por el desequilibrio entre carga y recuperación. Variables como el ACWR, Dolor, Molestia, Sueño, y Días consecutivos son clave para anticipar lesiones sin necesidad de esperar que ocurran.
+
+📈 Variables disponibles
+PSE, Tiempo → Se usa para calcular carga aguda y crónica
+
+Crear ACWR = carga semana actual / carga 4s
+
+Sueño, Dolor, Estrés, Molestia, Fatiga
+
+Crear variable Dias_consecutivos desde Fecha y atleta
+
+🧪 Desarrollo técnico
+Clasificación con RandomForestClassifier, XGBoostClassifier
+
+Balanceo con SMOTE si hay pocas lesiones confirmadas
+
+Métricas: f1_score, recall, matriz de confusión
+
+🧾 Resultados esperados
+Predicción de riesgo: 0 = Bajo, 1 = Moderado, 2 = Alto
+
+Alertas automáticas para el cuerpo médico
+
+Tabla diaria con ranking de riesgo por atleta
+
+💡 Aplicación
+Intervención preventiva (descarga, control médico)
+
+Visualización tipo semáforo por atleta en app
+
+Reportes PDF automáticos para seguimiento
+
+📎 Casos de uso prácticos
+🏃‍♂️ Atletismo: Identificar si fondistas presentan sobrecarga acumulada por sesiones dobles (combinando Fatiga, PSE, Tiempo).
+
+🤕 Molestias frecuentes: Detección de patrones en atletas con más de 3 semanas seguidas con molestias o altos niveles de dolor.
+
+📈 Optimización de carga: Validación cruzada con planificación técnica vs carga recomendada.
+
+📊 Visualización de perfiles: Agrupación de atletas para presentar reportes al equipo técnico o metodológico.
+
+📌 Conclusión
+Los modelos propuestos no solo son técnicamente viables con el dataset df_final.csv, sino también alineados con el objetivo del proyecto final: transformar datos en decisiones deportivas informadas. Cada modelo se apoya en las variables reales del sistema y tiene aplicaciones prácticas inmediatas en prevención, planificación y personalización del entrenamiento.
+
