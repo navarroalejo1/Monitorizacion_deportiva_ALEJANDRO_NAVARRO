@@ -1,0 +1,84 @@
+
+# === Python general ===
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+*.swp
+*.bak
+*.log
+
+# === Entorno virtual ===
+venv/
+.env/
+.env.*
+
+# === Jupyter Notebooks Checkpoints ===
+.ipynb_checkpoints/
+
+# === Archivos de configuración personal o del IDE ===
+.vscode/
+.idea/
+*.code-workspace
+
+# === Configuración de sistema operativo ===
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# === Archivos temporales ===
+*.tmp
+*.temp
+*.bak
+*~
+
+# === Salidas y artefactos generados ===
+*.zip
+*.rar
+*.tar.gz
+*.7z
+*.pdf
+*.csv
+*.xlsx
+
+# Excepto los datos importantes del proyecto
+!data/
+!data/concat/
+!data/*.csv
+!data/*.xlsx
+
+# === Dash/Streamlit assets y caché ===
+assets/__pycache__/
+pages/__pycache__/
+__pycache__/
+.cache/
+.streamlit/
+
+# === Exportaciones del proyecto ===
+/Proy_monitoring_*.zip
+/Proy_monitoring_*.md
+
+# === Archivos sensibles o temporales personalizados ===
+/credenciales.json
+/secrets.json
+/config.json
+
+# === Archivos multimedia grandes o temporales ===
+*.mp4
+*.mov
+*.avi
+*.webm
+*.gif
+*.jpg
+*.jpeg
+*.png
+*.svg
+
+# Excepto logos institucionales en assets
+!assets/
+!assets/*.png
+
+# === Carpeta de despliegue o builds si aplica ===
+/build/
+/dist/
+/node_modules/
