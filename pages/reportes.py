@@ -9,7 +9,8 @@ from utils.filtros import registrar_callbacks_filtros
 df = load_df_final()
 df["FECHA_DT"] = pd.to_datetime(df["FECHA"], errors="coerce", dayfirst=True)
 df["DIA"] = df["FECHA_DT"].dt.day
-df["MES"] = df["FECHA_DT"].dt.month.astype(str).str.zfill(2)
+df["MES"] = df["FECHA_DT"].dt.strftime("%b")  # Mes en iniciales: Jan, Feb...
+ligas = sorted(df["DEPORTE"].dropna().unique())  # Asegurar opciones para el filtro de deporte
 
 # === Layout ===
 layout = html.Div([
@@ -17,7 +18,7 @@ layout = html.Div([
 
     # === Filtros horizontales principales ===
     dbc.Row([
-        dbc.Col(dcc.Dropdown(id="filtro_liga_reportes", placeholder="Deporte"), md=3),
+        dbc.Col(dcc.Dropdown(id="filtro_liga_reportes", options=[{"label": l, "value": l} for l in ligas], placeholder="Deporte"), md=3),
         dbc.Col(dcc.Dropdown(id="filtro_modalidad_reportes", placeholder="Modalidad"), md=3),
         dbc.Col(dcc.Dropdown(id="filtro_genero_reportes", placeholder="Género"), md=3),
         dbc.Col(dcc.Dropdown(id="filtro_nombre_reportes", placeholder="Atleta"), md=3),
@@ -55,7 +56,7 @@ layout = html.Div([
         html.Div(id="tabla_diaria"),
 
         html.Hr(),
-        html.H5("📆 Diligenciamientos Totales por Mes"),
+        html.H5("📆 Reportes Mensuales por Tipo de Encuesta"),
         html.Div(id="tabla_mensual")
     ])
 ])
@@ -108,10 +109,14 @@ def actualizar_tablas(liga, modalidad, genero, atleta, fecha_ini, fecha_fin):
         page_size=15
     )
 
-    # === Tabla resumen mensual ===
-    resumen = dff.groupby(["ATLETA", "MES"])["FECHA"].count().reset_index()
-    resumen.rename(columns={"FECHA": "TOTAL"}, inplace=True)
-    resumen = resumen.sort_values(["MES", "ATLETA"])
+    # === Tabla resumen mensual por tipo de encuesta ===
+    resumen = (
+        dff.groupby(["ATLETA", "MES", "TIPO_ENC"])
+        .size()
+        .unstack(fill_value=0)
+        .reset_index()
+        .sort_values(["MES", "ATLETA"])
+    )
 
     tabla2 = dash_table.DataTable(
         columns=[{"name": i, "id": i} for i in resumen.columns],
