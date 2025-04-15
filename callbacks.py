@@ -4,7 +4,7 @@ from pages.hoy import layout as hoy_layout
 from pages.bienestar import layout as bienestar_layout
 from pages.molestias import layout as molestias_layout
 from pages.carga import layout as carga_layout
-from pages.competencia import layout as competencia_layout
+from pages.riesgo import layout as riesgo_layout
 from pages.reportes import layout as reportes_layout
 
 def register_main_callbacks(app):
@@ -23,9 +23,9 @@ def register_main_callbacks(app):
             return molestias_layout
         elif pathname == "/carga":
             return carga_layout
-        elif pathname == "/competencia":
-            return competencia_layout
         elif pathname == "/reportes":
             return reportes_layout
+        elif pathname == "/riesgo":
+            return riesgo_layout
         else:
             return home_layout  # Página por defecto

@@ -39,6 +39,7 @@ def get_main_layout():
                         dbc.NavLink("Molestias", href="/molestias", active="exact"),
                         dbc.NavLink("Carga", href="/carga", active="exact"),
                         dbc.NavLink("Reportes", href="/reportes", active="exact"),
+                        dbc.NavLink("Riesgo", href="/riesgo", active="exact"),
                     ], className="ms-auto", navbar=True)
                 ], width="auto")
             ], className="g-3 align-items-center", style={"width": "100%"})
