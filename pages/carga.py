@@ -1,138 +1,137 @@
-from dash import html, dcc, Input, Output, State, callback, dash_table
-import pandas as pd
+from dash import html, dcc, callback, Input, Output
+import dash_bootstrap_components as dbc
 import plotly.express as px
+import pandas as pd
 from utils.data_loader import load_df_final
-from utils.filtros import generar_filtros, registrar_callbacks_filtros
-from utils.ACWR import acwr_calculator
-from dash.exceptions import PreventUpdate
+from utils.ACWR import calcular_acwr
 
-# === Cargar y preparar datos base ===
+# === Cargar datos base ===
 df = load_df_final()
-df["FECHA_DT"] = pd.to_datetime(df["FECHA"], dayfirst=True, errors="coerce")
+df = df[(df["TIPO_ENC"] == "Entrenamiento") & (df["TIEMPO"].notna()) & (df["PSE"].notna())].copy()
+df["FECHA"] = pd.to_datetime(df["FECHA"], dayfirst=True, errors="coerce")
+df["TIEMPO"] = pd.to_numeric(df["TIEMPO"], errors="coerce")
+df["PSE"] = pd.to_numeric(df["PSE"], errors="coerce")
+df["CARGA"] = df["TIEMPO"] * df["PSE"]
+df["MES"] = df["FECHA"].dt.to_period("M").astype(str)
+df["SEMANA"] = df["FECHA"].apply(lambda x: x.to_period("W").start_time if pd.notnull(x) else pd.NaT)
 
-# === Layout principal ===
+ligas = sorted(df["DEPORTE"].dropna().unique())
+
 layout = html.Div([
-    html.H3("📊 Monitorización de la Carga de Entrenamiento", style={"textAlign": "center"}),
+    html.H4("Análisis de Carga de Entrenamiento", className="text-center my-3"),
 
-    # === Filtros jerárquicos desde módulo reutilizable ===
-    generar_filtros('carga'),
+    dbc.Row([
+        dbc.Col(dcc.Dropdown(id="filtro-liga", options=[{"label": l, "value": l} for l in ligas], placeholder="Deporte"), md=3),
+        dbc.Col(dcc.Dropdown(id="filtro-modalidad", placeholder="Modalidad"), md=3),
+        dbc.Col(dcc.Dropdown(id="filtro-genero", placeholder="Género"), md=3),
+        dbc.Col(dcc.Dropdown(id="filtro-atleta", placeholder="Nombre"), md=3),
+    ], className="mb-4"),
 
+    dbc.Button("Descargar PDF", color="danger", className="mb-4"),
+
+    dbc.Row([dbc.Col(dcc.Graph(id="grafico-pse"), md=12)]),
     html.Hr(),
 
-    # === Visualizaciones ===
-    html.Div([
-        html.H4("🟠 Percepción Subjetiva del Esfuerzo (últimos 15 días)"),
-        dcc.Graph(id='grafico_pse_diario'),
+    dbc.Row([dbc.Col(dcc.Graph(id="grafico-acwr"), md=12)]),
+    html.Hr(),
 
-        html.H4("🟠 Índice de Carga ACWR"),
-        dcc.Graph(id='grafico_acwr'),
+    dbc.Row([dbc.Col(dcc.Graph(id="grafico-carga-semanal"), md=12)]),
+    html.Hr(),
 
-        html.H4("🟠 Tiempo de Actividad por Día"),
-        dcc.Graph(id='grafico_actividad_tiempo'),
+    dbc.Row([dbc.Col(dcc.Graph(id="grafico-carga-minutos-ua"), md=12)]),
+    html.Hr(),
 
-        html.H4("🟠 Carga Total Semanal por Atleta"),
-        dcc.Graph(id='grafico_carga_semanal'),
+    dbc.Row([dbc.Col(dcc.Graph(id="grafico-tipo-act"), md=12)]),
+    html.Hr(),
 
-        html.H4("🟠 Relación entre Carga Diaria y Registro de Molestias"),
-        dcc.Graph(id='grafico_carga_molestias')
-    ], style={"padding": "0 15px"}),
-
-    html.Br(),
-
-    html.Button("📄 Exportar Reporte de Carga", id="btn_export_pdf", n_clicks=0,
-        style={
-            "backgroundColor": "#d9534f",
-            "color": "white",
-            "border": "none",
-            "padding": "10px 15px",
-            "borderRadius": "5px",
-            "cursor": "pointer",
-            "fontWeight": "bold"
-        }
-    )
+    dbc.Row([dbc.Col(dcc.Graph(id="grafico-tipo-mes"), md=12)]),
 ])
 
-# === Callback para visualizaciones ===
 @callback(
-    Output("grafico_pse_diario", "figure"),
-    Output("grafico_acwr", "figure"),
-    Output("grafico_actividad_tiempo", "figure"),
-    Output("grafico_carga_semanal", "figure"),
-    Output("grafico_carga_molestias", "figure"),
-    Input("filtro_nombre_carga", "value"),
-    Input("filtro_liga_carga", "value"),
-    Input("filtro_modalidad_carga", "value"),
-    Input("filtro_genero_carga", "value")
+    Output("filtro-modalidad", "options"),
+    Output("filtro-genero", "options"),
+    Output("filtro-atleta", "options"),
+    Input("filtro-liga", "value")
 )
-def update_graficos(nombre, liga, modalidad, genero):
+def actualizar_filtros(liga):
+    dff = df[df["DEPORTE"] == liga] if liga else df.copy()
+    modalidades = sorted(dff["MODALIDAD"].dropna().unique())
+    generos = sorted(dff["GENERO"].dropna().unique())
+    atletas = sorted(dff["ATLETA"].dropna().unique())
+    return (
+        [{"label": m, "value": m} for m in modalidades],
+        [{"label": g, "value": g} for g in generos],
+        [{"label": a, "value": a} for a in atletas]
+    )
+
+@callback(
+    Output("grafico-pse", "figure"),
+    Output("grafico-acwr", "figure"),
+    Output("grafico-carga-semanal", "figure"),
+    Output("grafico-carga-minutos-ua", "figure"),
+    Output("grafico-tipo-act", "figure"),
+    Output("grafico-tipo-mes", "figure"),
+    Input("filtro-liga", "value"),
+    Input("filtro-modalidad", "value"),
+    Input("filtro-genero", "value"),
+    Input("filtro-atleta", "value")
+)
+def actualizar_graficos(liga, modalidad, genero, atleta):
     dff = df.copy()
     if liga: dff = dff[dff["DEPORTE"] == liga]
     if modalidad: dff = dff[dff["MODALIDAD"] == modalidad]
     if genero: dff = dff[dff["GENERO"] == genero]
-    if nombre: dff = dff[dff["ATLETA"] == nombre]
+    if atleta: dff = dff[dff["ATLETA"] == atleta]
 
     if dff.empty:
-        fig_empty = px.scatter(title="No hay datos disponibles.")
-        return fig_empty, fig_empty, fig_empty, fig_empty, fig_empty
+        fig_vacia = px.scatter(title="No hay datos disponibles")
+        return fig_vacia, fig_vacia, fig_vacia, fig_vacia, fig_vacia, fig_vacia
 
-    # === PSE últimos 15 días ===
-    max_fecha = dff["FECHA_DT"].max()
-    if pd.isna(max_fecha):
-        fig_empty = px.scatter(title="No hay fechas válidas.")
-        return fig_empty, fig_empty, fig_empty, fig_empty, fig_empty
-
-    fecha_inicio = max_fecha - pd.Timedelta(days=15)
-    pse_df = dff[(dff["FECHA_DT"] >= fecha_inicio) & (dff["FECHA_DT"] <= max_fecha)]
-    fig_pse = px.line(pse_df, x="FECHA_DT", y="PSE", title="Percepción Subjetiva del Esfuerzo", markers=True)
-    fig_pse.update_layout(
-        xaxis=dict(
-            rangeselector=dict(buttons=[
-                dict(count=7, label="7d", step="day", stepmode="backward"),
-                dict(count=15, label="15d", step="day", stepmode="backward"),
-                dict(step="all")
-            ]),
-            rangeslider=dict(visible=True),
-            type="date"
-        )
-    )
+    # === PSE diario ===
+    fig_pse = px.line(dff, x="FECHA", y="PSE", color="ATLETA", markers=True, title="PSE Diario")
+    fig_pse.update_xaxes(rangeslider_visible=True)
 
     # === ACWR ===
-    acwr_df = acwr_calculator(dff)
-    fig_acwr = px.line(acwr_df, x="FECHA", y="ACWR", title="Índice ACWR", markers=True)
-
-    # === Tiempo vs Tipo de Actividad ===
-    actividad_df = dff[dff["TIEMPO"].notna()]
-    fig_tipoact = px.bar(
-        actividad_df,
-        x="FECHA_DT", y="TIEMPO", color="TIPO_ACT",
-        title="Tiempo de actividad por día",
-        color_discrete_sequence=px.colors.sequential.Oranges
-    )
-
-    # === Carga semanal por atleta ===
-    semanal_df = dff.copy()
-    semanal_df["SEMANA"] = semanal_df["FECHA_DT"].dt.to_period("W").astype(str)
-    carga_week = semanal_df.groupby(["ATLETA", "SEMANA"])["CARGA"].sum().reset_index()
-    fig_carga_sem = px.line(carga_week, x="SEMANA", y="CARGA", color="ATLETA", title="Carga semanal por atleta")
-    fig_carga_sem.update_layout(
-        xaxis=dict(rangeslider=dict(visible=True), type="category")
-    )
-
-    # === Relación Carga vs Molestias ===
-    if "MOLESTIA" in dff.columns:
-        dff["MOLESTIA_PRES"] = dff["MOLESTIA"].notna()
-        fig_molestias = px.scatter(
-            dff,
-            x="CARGA", y="MOLESTIA_PRES",
-            title="Relación entre Carga y Registro de Molestias",
-            labels={"MOLESTIA_PRES": "¿Hubo molestia?"},
-            color="MOLESTIA_PRES",
-            color_discrete_map={True: "red", False: "green"}
-        )
+    df_acwr = dff[["ATLETA", "FECHA", "CARGA"]].copy()
+    df_acwr = df_acwr[df_acwr["FECHA"] >= df_acwr["FECHA"].max() - pd.Timedelta(days=15)]
+    df_acwr = calcular_acwr(df_acwr)
+    if df_acwr is None or not isinstance(df_acwr, pd.DataFrame) or df_acwr.empty or "ACWR" not in df_acwr.columns:
+        fig_acwr = px.scatter(title="ACWR no disponible")
     else:
-        fig_molestias = px.scatter(title="No hay datos de molestias disponibles")
+        fig_acwr = px.line(df_acwr, x="FECHA", y="ACWR", color="ATLETA", markers=True,
+                           title="ACWR (Acute:Chronic Workload Ratio)")
+        fig_acwr.add_hrect(y0=0.8, y1=1.3, fillcolor="green", opacity=0.2, line_width=0,
+                           annotation_text="Zona óptima", annotation_position="top left")
+        fig_acwr.add_hline(y=1.5, line_dash="dot", line_color="red", annotation_text="Riesgo alto")
+        fig_acwr.add_hline(y=0.8, line_dash="dot", line_color="orange", annotation_text="Carga baja")
+        fig_acwr.update_xaxes(rangeslider_visible=True)
 
-    return fig_pse, fig_acwr, fig_tipoact, fig_carga_sem, fig_molestias
+    # === Carga semanal U.A. ===
+    semanal = dff.groupby(["ATLETA", "SEMANA"]).agg({"CARGA": "sum"}).reset_index()
+    fig_semanal = px.line(semanal, x="SEMANA", y="CARGA", color="ATLETA", markers=True,
+                          title="Carga Semanal (U.A.)")
+    fig_semanal.update_xaxes(rangeslider_visible=True)
 
-# === Registrar callbacks para filtros ===
-registrar_callbacks_filtros("carga")
+    # === Carga combinada Minutos + U.A. ===
+    semanal_combo = dff.groupby(["SEMANA", "ATLETA"]).agg({"TIEMPO": "sum", "CARGA": "sum"}).reset_index()
+    fig_combo = px.line(semanal_combo, x="SEMANA", y="TIEMPO", color="ATLETA", markers=True,
+                        title="Carga Semanal: Minutos y UA")
+    for atleta in semanal_combo["ATLETA"].unique():
+        sub = semanal_combo[semanal_combo["ATLETA"] == atleta]
+        fig_combo.add_scatter(x=sub["SEMANA"], y=sub["CARGA"], mode="lines+markers",
+                              name=f"{atleta} - Carga (UA)", line=dict(dash="dot"))
+    fig_combo.update_layout(yaxis_title="Minutos / UA", legend_title="Atleta")
+
+    # === Duración total por tipo de actividad ===
+    act = dff.groupby("TIPO_ACT")["TIEMPO"].sum().reset_index().sort_values("TIEMPO")
+    fig_tipo = px.bar(act, x="TIEMPO", y="TIPO_ACT", orientation="h",
+                      title="Duración total por tipo de actividad", color="TIEMPO", color_continuous_scale="Viridis")
+
+    # === Tiempo por tipo de actividad y mes (con modo log si es necesario) ===
+    resumen_mes = dff.groupby(["MES", "TIPO_ACT"])["TIEMPO"].sum().reset_index()
+    fig_mes = px.bar(resumen_mes, x="MES", y="TIEMPO", color="TIPO_ACT",
+                     title="Tiempo por tipo de actividad y mes", barmode="group")
+    if resumen_mes["TIEMPO"].max() > 10 * resumen_mes["TIEMPO"].median():
+        fig_mes.update_yaxes(type="log")
+
+    return fig_pse, fig_acwr, fig_semanal, fig_combo, fig_tipo, fig_mes

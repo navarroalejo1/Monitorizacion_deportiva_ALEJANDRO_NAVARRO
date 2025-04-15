@@ -1,10 +1,11 @@
 from dash import html, dcc, Input, Output, callback, dash_table
+import dash_bootstrap_components as dbc
 import pandas as pd
 import plotly.express as px
 from utils.data_loader import load_df_final
 from models.riesgo_lesion import entrenar_modelo_riesgo, predecir_riesgo
 
-# === Cargar y preparar los datos ===
+# === Cargar datos base ===
 df = load_df_final()
 
 df.rename(columns={
@@ -15,9 +16,7 @@ df.rename(columns={
     "FECHA ": "FECHA"
 }, inplace=True)
 
-if "FECHA_DT" not in df.columns:
-    df["FECHA_DT"] = pd.to_datetime(df["FECHA"], errors="coerce", dayfirst=True)
-
+df["FECHA_DT"] = pd.to_datetime(df["FECHA"], errors="coerce", dayfirst=True)
 for col in ["SUEÑO", "DOLOR", "PSE", "TIEMPO"]:
     if col in df.columns:
         df[col] = pd.to_numeric(df[col], errors="coerce")
@@ -26,26 +25,48 @@ for col in ["SUEÑO", "DOLOR", "PSE", "TIEMPO"]:
 modelo = entrenar_modelo_riesgo(df)
 df_pred = predecir_riesgo(modelo, df)
 
+# === Layout principal ===
 layout = html.Div([
     html.H3("🚨 Análisis de Riesgo de Lesión", style={"textAlign": "center"}),
 
+    # Filtros superiores
+    dbc.Row([
+        dbc.Col(dcc.Dropdown(id="filtro_liga_riesgo", options=[{"label": l, "value": l} for l in sorted(df["DEPORTE"].dropna().unique())], placeholder="Selecciona un Deporte"), md=3),
+        dbc.Col(dcc.Dropdown(id="filtro_modalidad_riesgo", placeholder="Modalidad"), md=3),
+        dbc.Col(dcc.Dropdown(id="filtro_genero_riesgo", placeholder="Género"), md=3),
+        dbc.Col(dcc.Dropdown(id="filtro_nombre_riesgo", placeholder="Nombre"), md=3)
+    ], className="mb-2"),
+
+    # Comentario automático con scroll
+    html.Div(id="comentario_automatico_riesgo",
+             style={"padding": "12px", "fontWeight": "bold", "fontSize": "16px", "maxHeight": "320px", "overflowY": "scroll"}),
+
+    # Tabla de resultados (máximo 20 filas visibles)
+    dash_table.DataTable(
+        id="tabla_riesgo",
+        page_size=20,
+        style_table={"overflowX": "auto", "maxHeight": "500px", "overflowY": "scroll"},
+        style_cell={"textAlign": "center"}
+    ),
+
+    # Distribución horizontal de 3 gráficos clave
     html.Div([
-        dcc.Dropdown(id="filtro_liga_riesgo", options=[{"label": l, "value": l} for l in sorted(df["DEPORTE"].dropna().unique())], placeholder="Selecciona una Liga"),
-        dcc.Dropdown(id="filtro_modalidad_riesgo", placeholder="Selecciona Modalidad"),
-        dcc.Dropdown(id="filtro_genero_riesgo", placeholder="Selecciona Género"),
-        dcc.Dropdown(id="filtro_nombre_riesgo", placeholder="Selecciona Atleta")
-    ], style={"marginBottom": "20px"}),
+        dbc.Row([
+            dbc.Col(dcc.Graph(id="grafico_riesgo_distribucion"), md=4),
+            dbc.Col(dcc.Graph(id="grafico_importancia"), md=4),
+            dbc.Col(dcc.Graph(id="grafico_riesgo_tiempo"), md=4),
+        ], className="mb-4")
+    ]),
 
-    html.Div(id="comentario_automatico_riesgo", style={"padding": "12px", "fontWeight": "bold", "fontSize": "16px"}),
-
-    dash_table.DataTable(id="tabla_riesgo", style_table={"overflowX": "auto"}, style_cell={"textAlign": "center"}),
-
-    dcc.Graph(id="grafico_riesgo_tiempo"),
-    dcc.Graph(id="grafico_riesgo_distribucion"),
-    dcc.Graph(id="grafico_riesgo_grupal"),
-    dcc.Graph(id="grafico_importancia")
+    # Comparación entre atletas
+    html.Div([
+        html.Label("Comparar atleta:", style={"marginRight": "10px"}),
+        dcc.Dropdown(id="filtro_comparar_riesgo", placeholder="Selecciona Atleta para comparar")
+    ], className="mb-2"),
+    dcc.Graph(id="grafico_riesgo_grupal")
 ])
 
+# === Comentario automático ===
 def generar_comentario(df_atleta):
     alto = (df_atleta["riesgo_lesion_predicho"] == 2).sum()
     medio = (df_atleta["riesgo_lesion_predicho"] == 1).sum()
@@ -58,7 +79,7 @@ def generar_comentario(df_atleta):
         return "🟩 Sin señales de alerta. El perfil es estable."
     return "ℹ️ Riesgo bajo predominante, pero con fluctuaciones."
 
-# === Callbacks con IDs únicos ===
+# === Callbacks jerárquicos ===
 @callback(
     Output("filtro_modalidad_riesgo", "options"),
     Input("filtro_liga_riesgo", "value")
@@ -92,6 +113,7 @@ def update_nombre_riesgo(genero, modalidad, liga):
     if genero: dff = dff[dff["GENERO"] == genero]
     return [{"label": n, "value": n} for n in sorted(dff["ATLETA"].dropna().unique())]
 
+# === Callback principal ===
 @callback(
     Output("comentario_automatico_riesgo", "children"),
     Output("tabla_riesgo", "data"),
@@ -100,6 +122,7 @@ def update_nombre_riesgo(genero, modalidad, liga):
     Output("grafico_riesgo_distribucion", "figure"),
     Output("grafico_riesgo_grupal", "figure"),
     Output("grafico_importancia", "figure"),
+    Output("filtro_comparar_riesgo", "options"),
     Input("filtro_nombre_riesgo", "value"),
     Input("filtro_genero_riesgo", "value"),
     Input("filtro_modalidad_riesgo", "value"),
@@ -113,7 +136,8 @@ def actualizar_vista_riesgo(nombre, genero, modalidad, liga):
     if nombre: dff = dff[dff["ATLETA"] == nombre]
 
     if dff.empty:
-        return "No hay datos disponibles.", [], [], px.scatter(title="Sin datos"), px.scatter(), px.scatter(), px.scatter()
+        vacio = px.scatter(title="Sin datos")
+        return "No hay datos disponibles.", [], [], vacio, vacio, vacio, vacio, []
 
     comentario = generar_comentario(dff)
     columnas = [{"name": c, "id": c} for c in ["FECHA", "ATLETA", "CARGA", "ACWR", "DOLOR", "SUEÑO", "riesgo_lesion_predicho"]]
@@ -122,9 +146,8 @@ def actualizar_vista_riesgo(nombre, genero, modalidad, liga):
     fig1 = px.line(dff, x="FECHA_DT", y="riesgo_lesion_predicho", title="Evolución del Riesgo", markers=True)
     fig2 = px.histogram(dff, x="riesgo_lesion_predicho", nbins=3, title="Distribución de Riesgo", color="riesgo_lesion_predicho")
     fig3 = px.box(df_pred, x="ATLETA", y="riesgo_lesion_predicho", color="GENERO", title="Comparación por Atleta")
+    fig4 = px.bar(x=modelo.feature_importances_, y=["CARGA", "ACWR", "DOLOR", "SUEÑO", "DÍAS_CONSECUTIVOS"],
+                  orientation='h', title="Importancia de Variables")
 
-    importancia = modelo.feature_importances_
-    etiquetas = ["CARGA", "ACWR", "DOLOR", "SUEÑO", "DÍAS_CONSECUTIVOS"]
-    fig4 = px.bar(x=importancia, y=etiquetas, orientation='h', title="Importancia de Variables")
-
-    return comentario, data, columnas, fig1, fig2, fig3, fig4
+    opciones_comparar = [{"label": n, "value": n} for n in sorted(df_pred["ATLETA"].dropna().unique())]
+    return comentario, data, columnas, fig1, fig2, fig3, fig4, opciones_comparar
