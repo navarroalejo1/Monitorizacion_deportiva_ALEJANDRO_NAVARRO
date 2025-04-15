@@ -1,9 +1,10 @@
-from dash import html, dcc, callback, Input, Output, State
+from dash import html, dcc, callback, Input, Output
 import dash_bootstrap_components as dbc
 from dash import dash_table
 import plotly.express as px
 import pandas as pd
 from utils.data_loader import load_df_final
+from utils.filtros import generar_filtros, registrar_callbacks_filtros
 
 # === Cargar y preparar datos ===
 df = load_df_final()
@@ -11,17 +12,14 @@ df = df[(df["TIPO_ENC"] == "Bienestar") & (df["MOLESTIA"].notna())].copy()
 df["FECHA_DT"] = pd.to_datetime(df["FECHA"], dayfirst=True, errors="coerce")
 df["MES"] = df["FECHA_DT"].dt.to_period("M").astype(str)
 
-ligas = sorted(df['DEPORTE'].dropna().unique())
-
 # === Layout ===
 layout = html.Div([
     html.H4("Registro de Molestias Corporales", className="text-center my-3"),
 
-    dbc.Row([
-        dbc.Col(dcc.Dropdown(id="filtro-liga-molestias", options=[{"label": l, "value": l} for l in ligas], placeholder="Deporte"), md=3),
-        dbc.Col(dcc.Dropdown(id="filtro-modalidad-molestias", placeholder="Modalidad"), md=3),
-        dbc.Col(dcc.Dropdown(id="filtro-genero-molestias", placeholder="Género"), md=3),
-        dbc.Col(dcc.Dropdown(id="filtro-atleta-molestias", placeholder="Nombre"), md=3),
+    # Filtros jerárquicos reutilizables
+    html.Div([
+        html.H5("Filtros", className="mb-2"),
+        generar_filtros("molestias")
     ], className="mb-4"),
 
     dbc.Row([
@@ -50,24 +48,6 @@ layout = html.Div([
     dcc.Graph(id="grafico-mapa")
 ])
 
-# === Callback: Filtros dinámicos ===
-@callback(
-    Output("filtro-modalidad-molestias", "options"),
-    Output("filtro-genero-molestias", "options"),
-    Output("filtro-atleta-molestias", "options"),
-    Input("filtro-liga-molestias", "value")
-)
-def actualizar_filtros(liga):
-    dff = df[df["DEPORTE"] == liga] if liga else df.copy()
-    modalidades = sorted(dff["MODALIDAD"].dropna().unique())
-    generos = sorted(dff["GENERO"].dropna().unique())
-    atletas = sorted(dff["ATLETA"].dropna().unique())
-    return (
-        [{"label": m, "value": m} for m in modalidades],
-        [{"label": g, "value": g} for g in generos],
-        [{"label": a, "value": a} for a in atletas]
-    )
-
 # === Callback: Gráficos y tablas ===
 @callback(
     Output("grafico-zonas", "figure"),
@@ -79,7 +59,7 @@ def actualizar_filtros(liga):
     Input("filtro-liga-molestias", "value"),
     Input("filtro-modalidad-molestias", "value"),
     Input("filtro-genero-molestias", "value"),
-    Input("filtro-atleta-molestias", "value")
+    Input("filtro-nombre-molestias", "value")
 )
 def actualizar_visualizaciones(liga, modalidad, genero, atleta):
     dff = df.copy()
@@ -154,3 +134,6 @@ def actualizar_visualizaciones(liga, modalidad, genero, atleta):
     )
 
     return fig_zonas, fig_frecuencia, fig_mapa, tabla_semanal, tabla_mes_a, tabla_mes_m
+
+# === Registrar callbacks jerárquicos ===
+registrar_callbacks_filtros("molestias")
