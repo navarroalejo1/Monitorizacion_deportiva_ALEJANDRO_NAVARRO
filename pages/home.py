@@ -15,13 +15,13 @@ layout = dbc.Container([
     # === Filtros principales ===
     dbc.Row([
         dbc.Col([
-            html.Label("Selecciona la liga o deporte:"),
+            html.Label("Selecciona la liga:"),
             dcc.Dropdown(id="dropdown-liga", options=[{"label": l, "value": l} for l in ligas],
                          placeholder="Liga...", persistence=True, persistence_type="session")
         ], width=4),
 
         dbc.Col([
-            html.Label("Selecciona la modalidad de entrenamiento:"),
+            html.Label("Selecciona Modalidad"),
             dcc.Dropdown(id="dropdown-modalidad", options=[{"label": m, "value": m} for m in modalidades],
                          placeholder="Modalidad...", persistence=True, persistence_type="session")
         ], width=4),

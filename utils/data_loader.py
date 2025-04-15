@@ -1,22 +1,4 @@
 import pandas as pd
-
-# === Rutas por defecto ===
-DF_FINAL_PATH = "data/concat/df_final.csv"
-MAPEO_COLUMNAS_PATH = "data/concat/Columnas_para_clasificar.xlsx"
-
-# === Carga del archivo final unificado ===
-def load_df_final(path=DF_FINAL_PATH):
-    try:
-        df = pd.read_csv(path, low_memory=False)
-        df.columns = df.columns.str.strip().str.upper()
-        if "FECHA" in df.columns:
-            df["FECHA"] = pd.to_datetime(df["FECHA"], errors="coerce")
-            df["FECHA"] = df["FECHA"].dt.strftime("%d-%m-%Y")  # ⇨ Formato DD-MM-AAAA
-        return df
-    except Exception as e:
-        print(f"❌ Error al cargar df_final.csv: {e}")
-        return pd.DataFrame()
-import pandas as pd
 import unicodedata
 
 # === Rutas por defecto ===
@@ -34,10 +16,10 @@ def load_df_final(path=DF_FINAL_PATH):
     try:
         df = pd.read_csv(path, low_memory=False, dtype=str)
 
-        # Establecer columnas limpias sin acentos ni símbolos conflictivos
+        # Limpieza de nombres de columnas
         df.columns = [clean_column_names(c) for c in df.columns]
 
-        # Corrección manual de columnas mal codificadas comunes
+        # Corrección de nombres frecuentes
         renombrar = {
             "SUEO": "SUENO",
             "HORAS_SUENO": "HORAS_SUENO",
@@ -45,10 +27,28 @@ def load_df_final(path=DF_FINAL_PATH):
         }
         df.rename(columns=renombrar, inplace=True)
 
-        # Formato uniforme para fechas
+        # Manejo de fechas
         if "FECHA" in df.columns:
             df["FECHA"] = pd.to_datetime(df["FECHA"], dayfirst=True, errors="coerce")
-            df["FECHA"] = df["FECHA"].dt.strftime("%d-%m-%Y")  # ⇨ Formato DD-MM-AAAA
+            df["FECHA_DT"] = df["FECHA"]
+            df["FECHA"] = df["FECHA"].dt.strftime("%d-%m-%Y")  # ⇨ Formato DD-MM-YYYY
+
+        # Conversión a numérico de columnas clave
+        if "TIEMPO" in df.columns:
+            df["TIEMPO"] = pd.to_numeric(df["TIEMPO"], errors="coerce")
+        if "PSE" in df.columns:
+            df["PSE"] = pd.to_numeric(df["PSE"], errors="coerce")
+
+        # Cálculo de CARGA = TIEMPO x PSE
+        if "TIEMPO" in df.columns and "PSE" in df.columns:
+            df["CARGA"] = df["TIEMPO"] * df["PSE"]
+
+        # Conversión de variables de bienestar a enteros
+        cols_bienestar = ["SUENO", "DOLOR", "FATIGA", "ESTRES", "HORAS_SUENO"]
+        for col in cols_bienestar:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+                df[col] = df[col].dropna().astype(int)
 
         return df
 
@@ -85,7 +85,7 @@ def get_data_by_group(df, grupos_dict, grupo_buscado):
     columnas_finales = columnas_fijas + [c for c in columnas_presentes if c not in columnas_fijas]
     return df[columnas_finales].dropna(subset=columnas_presentes, how='all') if columnas_finales else pd.DataFrame()
 
-# === Extra: filtrar por condiciones generales desde 'home' ===
+# === Filtro general por LIGA, MODALIDAD, GÉNERO ===
 def filtrar_por_seleccion(df, liga=None, modalidad=None, genero=None):
     df_filtrado = df.copy()
     if liga:

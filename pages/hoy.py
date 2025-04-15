@@ -1,139 +1,174 @@
-from dash import html, dcc, callback, Output, Input, State, ctx, ALL
+from dash import html, dcc, callback, Input, Output, State, ctx
+from dash.dependencies import ALL
+from dash.exceptions import PreventUpdate
 import dash_bootstrap_components as dbc
+from dash import dash_table
 import pandas as pd
-import dash
-from utils.data_loader import load_df_final, filtrar_por_seleccion
+from utils.data_loader import load_df_final
 
-# === Cargar DataFrame base ===
+# === Cargar datos globales ===
 df = load_df_final()
+df["FECHA_DT"] = pd.to_datetime(df["FECHA"], dayfirst=True, errors="coerce")
+ligas = sorted(df["DEPORTE"].dropna().unique())
 
-# === Valores únicos para filtros ===
-ligas = sorted(df['DEPORTE'].dropna().unique())
-modalidades = sorted(df['MODALIDAD'].dropna().unique()) if 'MODALIDAD' in df.columns else []
-generos = sorted(df['GENERO'].dropna().unique()) if 'GENERO' in df.columns else []
+# === Layout general ===
+layout = html.Div([
+    html.H4("Resumen Corto", className="text-center my-3"),
 
-# === Últimas fechas ===
-fechas_disponibles = sorted(df['FECHA'].dropna().unique(), reverse=True)[:7]
-
-# === Layout ===
-layout = dbc.Container([
-    dcc.Store(id="filtros-hoy", storage_type="session"),
-    html.H4("Reportes de los últimos 7 días", className="my-4"),
-
+    # Filtros
     dbc.Row([
-        dbc.Col([
-            html.Label("Deporte:"),
-            dcc.Dropdown(id="hoy-liga", options=[{"label": l, "value": l} for l in ligas], placeholder="Selecciona el deporte...")
-        ], width=4),
-        dbc.Col([
-            html.Label("Modalidad:"),
-            dcc.Dropdown(id="hoy-modalidad", options=[{"label": m, "value": m} for m in modalidades], placeholder="Modalidad...")
-        ], width=4),
-        dbc.Col([
-            html.Label("Género:"),
-            dcc.Dropdown(id="hoy-genero", options=[{"label": g, "value": g} for g in generos], placeholder="Género...")
-        ], width=4),
-    ], className="mb-3"),
+        dbc.Col(dcc.Dropdown(id="filtro_liga", options=[{"label": l, "value": l} for l in ligas], placeholder="Selecciona un Deporte"), md=4),
+        dbc.Col(dcc.Dropdown(id="filtro_modalidad", placeholder="Modalidad"), md=4),
+        dbc.Col(dcc.Dropdown(id="filtro_genero", placeholder="Género"), md=4),
+    ], className="mb-2"),
 
-    dbc.Button("Filtrar", id="btn-filtrar-hoy", color="success", className="mb-4"),
+    dbc.Button("Filtrar", id="btn-filtrar-hoy", color="success", className="mb-3"),
 
-    dbc.Row([
-        dbc.Col([
-            dbc.Button(date, id={"type": "btn-fecha", "index": date}, color="light", className="m-1")
-            for date in fechas_disponibles
-        ])
-    ], className="mb-4"),
+    dcc.Store(id="filtros-hoy"),
+    dcc.Store(id="fecha-seleccionada"),
 
-    dbc.Row([
-        dbc.Col([
-            html.H5("Bienestar", className="text-white p-2", style={"backgroundColor": "#198754"}),
-            html.Div(id="tabla-bienestar")
-        ], width=6),
-        dbc.Col([
-            html.H5("Ubicación de molestia", className="text-white p-2", style={"backgroundColor": "#198754"}),
-            html.Div([
-                html.Div([
-                    html.Img(src="/assets/body_base.png", style={"width": "100%"}, id="imagen-base"),
-                    html.Div(id="overlay-molestias", style={"position": "absolute", "top": 0, "left": 0})
-                ], style={"position": "relative", "minHeight": "400px"})
-            ])
-        ], width=6),
-    ]),
+    html.Hr(),
 
-    html.H5("Molestias", className="text-white p-2 mt-4", style={"backgroundColor": "#198754"}),
-    html.Div(id="tabla-molestias")
-], fluid=True)
+    html.Div(id="mosaico-fechas", className="mb-4"),
 
-# === CALLBACKS INTERNOS ===
+    # Sección Bienestar
+    html.H5("🟢 Bienestar", className="text-start text-success"),
+    html.Div(id="tabla-bienestar-hoy"),
 
+    # Sección Molestias
+    html.H5("🟠 Molestias", className="text-start text-warning mt-4"),
+    html.Div(id="tabla-molestias-hoy"),
+    html.Img(src="/assets/body_base.png", id="imagen-molestias", style={"width": "40%"}),
+
+    # Sección Carga
+    html.H5("🔵 Actividad / Carga", className="text-start text-primary mt-4"),
+    html.Div(id="tabla-carga-hoy"),
+
+    html.Hr(),
+    dbc.Button("Descargar reporte en PDF", id="btn-exportar-pdf", color="danger", className="mt-3")
+])
+
+# === Callback: actualizar filtros secundarios ===
+@callback(
+    Output("filtro_modalidad", "options"),
+    Output("filtro_genero", "options"),
+    Input("filtro_liga", "value")
+)
+def actualizar_filtros(deporte):
+    dff = df[df["DEPORTE"] == deporte] if deporte else df.copy()
+    modalidades = sorted(dff["MODALIDAD"].dropna().unique()) if "MODALIDAD" in dff.columns else []
+    generos = sorted(dff["GENERO"].dropna().unique()) if "GENERO" in dff.columns else []
+    return (
+        [{"label": m, "value": m} for m in modalidades],
+        [{"label": g, "value": g} for g in generos]
+    )
+
+# === Callback: aplicar filtros ===
 @callback(
     Output("filtros-hoy", "data"),
     Input("btn-filtrar-hoy", "n_clicks"),
-    State("hoy-liga", "value"),
-    State("hoy-modalidad", "value"),
-    State("hoy-genero", "value")
+    State("filtro_liga", "value"),
+    State("filtro_modalidad", "value"),
+    State("filtro_genero", "value"),
+    prevent_initial_call=True
 )
-def guardar_filtros(n, liga, modalidad, genero):
-    if n:
-        return {"DEPORTE": liga, "MODALIDAD": modalidad, "GENERO": genero}
-    return dash.no_update
+def aplicar_filtros(_, liga, modalidad, genero):
+    return {"DEPORTE": liga, "MODALIDAD": modalidad, "GENERO": genero}
 
+# === Callback: mostrar botones de fechas ===
 @callback(
-    Output("tabla-bienestar", "children"),
-    Output("tabla-molestias", "children"),
-    Output("overlay-molestias", "children"),
-    Input({"type": "btn-fecha", "index": ALL}, "n_clicks"),
-    State("filtros-hoy", "data")
+    Output("mosaico-fechas", "children"),
+    Input("filtros-hoy", "data")
 )
-def actualizar_datos(n_clicks_list, filtros):
+def mostrar_fechas(filtros):
+    dff = df.copy()
+    if filtros:
+        if filtros.get("DEPORTE"): dff = dff[dff["DEPORTE"] == filtros["DEPORTE"]]
+        if filtros.get("MODALIDAD"): dff = dff[dff["MODALIDAD"] == filtros["MODALIDAD"]]
+        if filtros.get("GENERO"): dff = dff[dff["GENERO"] == filtros["GENERO"]]
+
+    fechas = dff["FECHA_DT"].dropna().sort_values(ascending=False).dt.strftime("%Y-%m-%d").unique()[:7]
+    botones = [
+        dbc.Button(fecha, id={"type": "boton-fecha", "index": fecha}, className="me-1", color="secondary")
+        for fecha in fechas
+    ]
+    return dbc.ButtonGroup(botones)
+
+# === Callback: seleccionar fecha desde mosaico ===
+@callback(
+    Output("fecha-seleccionada", "data"),
+    Input({"type": "boton-fecha", "index": ALL}, "n_clicks"),
+    State({"type": "boton-fecha", "index": ALL}, "id"),
+    prevent_initial_call=True
+)
+def seleccionar_fecha(n_clicks, ids):
     triggered = ctx.triggered_id
-    if not triggered:
-        return dash.no_update, dash.no_update, dash.no_update
+    if triggered:
+        return triggered["index"]
+    raise PreventUpdate
 
-    selected_date = triggered["index"]
-    df_filtrado = filtrar_por_seleccion(df, filtros.get("DEPORTE"), filtros.get("MODALIDAD"), filtros.get("GENERO"))
-    df_fecha = df_filtrado[df_filtrado["FECHA"] == selected_date]
+# === Callback: actualizar las tres tablas ===
+@callback(
+    Output("tabla-bienestar-hoy", "children"),
+    Output("tabla-molestias-hoy", "children"),
+    Output("tabla-carga-hoy", "children"),
+    Input("filtros-hoy", "data"),
+    Input("fecha-seleccionada", "data"),
+    prevent_initial_call=True
+)
+def actualizar_tablas(filtros, fecha):
+    dff = df.copy()
+    if filtros:
+        if filtros.get("DEPORTE"): dff = dff[dff["DEPORTE"] == filtros["DEPORTE"]]
+        if filtros.get("MODALIDAD"): dff = dff[dff["MODALIDAD"] == filtros["MODALIDAD"]]
+        if filtros.get("GENERO"): dff = dff[dff["GENERO"] == filtros["GENERO"]]
+    if fecha:
+        dff = dff[dff["FECHA_DT"].dt.strftime("%Y-%m-%d") == fecha]
 
-    # Bienestar
-    df_bienestar = df_fecha[df_fecha["TIPO_ENC"].str.upper() == "BIENESTAR"]
-    cols_bienestar = [c for c in df_bienestar.columns if c in ["FECHA", "ATLETA", "SUEÑO", "FATIGA", "ESTRÉS", "DOLOR"]]
-    tabla_bienestar = dbc.Table.from_dataframe(df_bienestar[cols_bienestar], striped=True, bordered=True, hover=True) if not df_bienestar.empty else "Sin reportes de bienestar."
+    # === Bienestar
+    cols_bienestar = [col for col in ["ATLETA", "SUENO", "DOLOR", "ESTRES", "FATIGA", "HORAS_SUENO"] if col in dff.columns]
+    if set(["SUENO", "DOLOR", "ESTRES", "FATIGA", "HORAS_SUENO"]).issubset(dff.columns):
+        df_bien = dff.dropna(subset=["SUENO", "DOLOR", "ESTRES", "FATIGA", "HORAS_SUENO"], how="any")
+    else:
+        df_bien = pd.DataFrame()
 
-    # Molestias
-    df_molestias = df_fecha[df_fecha["TIPO_ENC"].str.upper() == "MOLESTIAS"]
-    cols_molestias = [c for c in df_molestias.columns if c in ["FECHA", "ATLETA", "ZONA"]]
-    tabla_molestias = dbc.Table.from_dataframe(df_molestias[cols_molestias], striped=True, bordered=True, hover=True) if not df_molestias.empty else "Sin reportes de molestias."
+    tabla_bienestar = dash_table.DataTable(
+        columns=[{"name": c.title(), "id": c} for c in cols_bienestar],
+        data=df_bien[cols_bienestar].to_dict("records"),
+        style_table={"overflowX": "auto"},
+        style_cell={"textAlign": "center"},
+        style_header={"backgroundColor": "#2E7D32", "color": "white", "fontWeight": "bold"},
+        page_size=25
+    ) if not df_bien.empty else "Sin datos disponibles."
 
-    # Zonas visuales
-    zonas_reportadas = df_molestias["ZONA"].dropna().str.lower().value_counts().to_dict()
-    zonas_dict = {
-        "cabeza": ("10%", "45%"), "cuello": ("18%", "45%"), "hombro": ("25%", "38%"),
-        "brazo superior": ("28%", "39%"), "brazo": ("32%", "35%"), "muñeca": ("33%", "30%"),
-        "espalda": ("45%", "50%"), "abdomen": ("50%", "48%"), "cadera": ("56%", "46%"),
-        "muslo": ("64%", "40%"), "rodilla": ("70%", "40%"), "tobillo": ("80%", "38%")
-    }
+    # === Molestias
+    if "MOLESTIA" in dff.columns:
+        dff_mol = dff[dff["MOLESTIA"].notna() & (dff["MOLESTIA"] != "")]
+        cols_molestias = [col for col in ["ATLETA", "MOLESTIA", "FECHA"] if col in dff.columns]
+        tabla_molestias = dash_table.DataTable(
+            columns=[{"name": c.title(), "id": c} for c in cols_molestias],
+            data=dff_mol[cols_molestias].to_dict("records"),
+            style_table={"overflowX": "auto"},
+            style_cell={"textAlign": "center"},
+            style_header={"backgroundColor": "#FF9800", "color": "black", "fontWeight": "bold"},
+            page_size=10
+        ) if not dff_mol.empty else "Sin datos disponibles."
+    else:
+        tabla_molestias = "Sin datos disponibles."
 
-    overlays = []
-    for zona, count in zonas_reportadas.items():
-        if zona in zonas_dict:
-            top, left = zonas_dict[zona]
-            overlays.append(
-                html.Div(
-                    str(count),
-                    style={
-                        "position": "absolute",
-                        "top": top,
-                        "left": left,
-                        "backgroundColor": "#dc3545",
-                        "color": "white",
-                        "borderRadius": "50%",
-                        "width": "30px",
-                        "height": "30px",
-                        "textAlign": "center",
-                        "lineHeight": "30px",
-                        "fontSize": "12px"
-                    }
-                )
-            )
+    # === Carga
+    if "TIEMPO" in dff.columns:
+        dff_carga = dff[dff["TIEMPO"].notna() & (dff["TIEMPO"] != "")]
+        cols_carga = [col for col in ["ATLETA", "TIPO_ACT", "TIEMPO", "FECHA"] if col in dff.columns]
+        tabla_carga = dash_table.DataTable(
+            columns=[{"name": c.title(), "id": c} for c in cols_carga],
+            data=dff_carga[cols_carga].to_dict("records"),
+            style_table={"overflowX": "auto"},
+            style_cell={"textAlign": "center"},
+            style_header={"backgroundColor": "#1565C0", "color": "white", "fontWeight": "bold"},
+            page_size=10
+        ) if not dff_carga.empty else "Sin datos disponibles."
+    else:
+        tabla_carga = "Sin datos disponibles."
 
-    return tabla_bienestar, tabla_molestias, overlays
+    return tabla_bienestar, tabla_molestias, tabla_carga
