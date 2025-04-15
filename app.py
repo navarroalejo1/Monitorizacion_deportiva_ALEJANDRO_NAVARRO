@@ -1,17 +1,25 @@
 import dash
-from dash import html
+from dash import html, dcc
 import dash_bootstrap_components as dbc
 
-# Inicialización de la app Dash
+from callbacks import register_main_callbacks
+from layout import get_main_layout
+
+# === Inicializar la aplicación ===
 app = dash.Dash(
     __name__,
     suppress_callback_exceptions=True,
     external_stylesheets=[dbc.themes.BOOTSTRAP]
 )
-server = app.server
+app.title = "Monitorización Indeportes Antioquia"
+server = app.server  # 🔁 Necesario para Gunicorn y Render
 
-# Layout de prueba
-app.layout = html.Div([
-    html.H1("✅ App cargada correctamente en Render"),
-    html.P("Esto confirma que app.py es válido.")
-])
+# === Layout general con navbar superior ===
+app.layout = get_main_layout()
+
+# === Registrar callbacks de navegación entre páginas ===
+register_main_callbacks(app)
+
+# === Solo para pruebas locales ===
+if __name__ == '__main__':
+    app.run_server(debug=True)
