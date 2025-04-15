@@ -2,7 +2,7 @@ from dash import html, dcc, Input, Output, State, callback, dash_table
 import pandas as pd
 import plotly.express as px
 from utils.data_loader import load_df_final
-from utils.filtros import generar_filtros
+from utils.filtros import generar_filtros, registrar_callbacks_filtros
 from utils.ACWR import acwr_calculator
 from dash.exceptions import PreventUpdate
 
@@ -14,7 +14,7 @@ df["FECHA_DT"] = pd.to_datetime(df["FECHA"], dayfirst=True, errors="coerce")
 layout = html.Div([
     html.H3("📊 Monitorización de la Carga de Entrenamiento", style={"textAlign": "center"}),
 
-    # === Filtros jerárquicos ===
+    # === Filtros jerárquicos desde módulo reutilizable ===
     generar_filtros('carga'),
 
     html.Hr(),
@@ -39,7 +39,6 @@ layout = html.Div([
 
     html.Br(),
 
-    # Botón para exportación (sin funcionalidad de PDF en esta entrega)
     html.Button("📄 Exportar Reporte de Carga", id="btn_export_pdf", n_clicks=0,
         style={
             "backgroundColor": "#d9534f",
@@ -53,47 +52,7 @@ layout = html.Div([
     )
 ])
 
-# === Callbacks para filtros jerárquicos ===
-@callback(
-    Output("filtro_modalidad_carga", "options"),
-    Input("filtro_liga_carga", "value")
-)
-def update_modalidad(liga):
-    if not liga:
-        return []
-    dff = df[df["DEPORTE"] == liga]
-    return [{"label": m, "value": m} for m in sorted(dff["MODALIDAD"].dropna().unique())]
-
-@callback(
-    Output("filtro_genero_carga", "options"),
-    Input("filtro_modalidad_carga", "value"),
-    Input("filtro_liga_carga", "value")
-)
-def update_genero(modalidad, liga):
-    dff = df.copy()
-    if liga:
-        dff = dff[dff["DEPORTE"] == liga]
-    if modalidad:
-        dff = dff[dff["MODALIDAD"] == modalidad]
-    return [{"label": g, "value": g} for g in sorted(dff["GENERO"].dropna().unique())]
-
-@callback(
-    Output("filtro_nombre_carga", "options"),
-    Input("filtro_genero_carga", "value"),
-    Input("filtro_modalidad_carga", "value"),
-    Input("filtro_liga_carga", "value")
-)
-def update_nombre(genero, modalidad, liga):
-    dff = df.copy()
-    if liga:
-        dff = dff[dff["DEPORTE"] == liga]
-    if modalidad:
-        dff = dff[dff["MODALIDAD"] == modalidad]
-    if genero:
-        dff = dff[dff["GENERO"] == genero]
-    return [{"label": n, "value": n} for n in sorted(dff["ATLETA"].dropna().unique())]
-
-# === Callback para todas las gráficas ===
+# === Callback para visualizaciones ===
 @callback(
     Output("grafico_pse_diario", "figure"),
     Output("grafico_acwr", "figure"),
@@ -107,14 +66,10 @@ def update_nombre(genero, modalidad, liga):
 )
 def update_graficos(nombre, liga, modalidad, genero):
     dff = df.copy()
-    if liga:
-        dff = dff[dff["DEPORTE"] == liga]
-    if modalidad:
-        dff = dff[dff["MODALIDAD"] == modalidad]
-    if genero:
-        dff = dff[dff["GENERO"] == genero]
-    if nombre:
-        dff = dff[dff["ATLETA"] == nombre]
+    if liga: dff = dff[dff["DEPORTE"] == liga]
+    if modalidad: dff = dff[dff["MODALIDAD"] == modalidad]
+    if genero: dff = dff[dff["GENERO"] == genero]
+    if nombre: dff = dff[dff["ATLETA"] == nombre]
 
     if dff.empty:
         fig_empty = px.scatter(title="No hay datos disponibles.")
@@ -178,3 +133,6 @@ def update_graficos(nombre, liga, modalidad, genero):
         fig_molestias = px.scatter(title="No hay datos de molestias disponibles")
 
     return fig_pse, fig_acwr, fig_tipoact, fig_carga_sem, fig_molestias
+
+# === Registrar callbacks para filtros ===
+registrar_callbacks_filtros("carga")
